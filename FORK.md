@@ -45,7 +45,7 @@ If upstream lands PR 2140 with commits other than `1a979e12` and `415a6d4a` (a s
 
 The TallyUI dev store (the `tallyui-woocommerce` repository, Mac mini only) runs WCPOS Pro, and Pro always loads its own bundled copy of Free from `woocommerce-pos-pro/vendor/wcpos/woocommerce-pos/`. Installing this fork as a separate plugin would change nothing, so `dev/woo-store/wcpos-fork.sh` in that repository overlays the bundle instead:
 
-- `apply` backs up Pro's stock bundle once, then copies this fork's tracked files from `tally` over it. It leaves out what `.distignore` leaves out and keeps Pro's built `vendor/`, `vendor_prefixed/` and `assets/`. It refuses when `tally` changes `composer.json`, `composer.lock` or `php-scoper/` relative to the commit Pro bundles.
+- `apply` backs up Pro's stock bundle once. It then applies only what changed between the commit Pro bundles (recorded in Pro's `vendor/composer/installed.json`) and `tally`: added and modified files are copied in, leaving out what `.distignore` leaves out, and deleted files are removed. It does not copy the whole tree, because this repository tracks a stale `vendor_prefixed/` that the release build regenerates. It refuses when `tally` changes `composer.json`, `composer.lock`, `php-scoper/`, `vendor/`, `vendor_prefixed/`, `assets/` or `packages/` relative to that commit, since those need a real build.
 - `restore` puts the stock bundle back exactly.
 - `status` prints `tally <sha>` or `stock`.
 
