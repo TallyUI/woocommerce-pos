@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
 use WCPOS\WooCommercePOS\API\V2\Orders_Controller;
 use WCPOS\WooCommercePOS\API\V2\Resolve_Controller;
 use WCPOS\WooCommercePOS\API\V2\Status_Controller;
+use WCPOS\WooCommercePOS\API\V2\Tally_Display_Controller;
 use WCPOS\WooCommercePOS\API\V2\Uuid_Backfill_Controller;
 use WCPOS\WooCommercePOS\API\V2\Variations_Controller;
 use WCPOS\WooCommercePOS\API\V2\Write_Controller;
@@ -71,7 +72,34 @@ final class Api {
 		$controllers['sync-variations'] = Variations_Controller::class;
 		$controllers['sync-resolve']    = Resolve_Controller::class;
 		$controllers['sync-write']      = Write_Controller::class;
+		// TallyUI fork (ADR-085 U7): the display routes are a wcpos/v2 service, not a
+		// sync-lane controller, so they join the v2 map and get no sync telemetry.
+		if ( false === has_filter( 'woocommerce_pos_rest_api_v2_controllers', array( self::class, 'register_v2_services' ) ) ) {
+			add_filter( 'woocommerce_pos_rest_api_v2_controllers', array( self::class, 'register_v2_services' ) );
+		}
 
 		return $controllers;
+	}
+
+	/**
+	 * TallyUI fork (ADR-085 U7): add the customer display routes to the v2 service
+	 * map, ahead of the other v2-native services.
+	 *
+	 * @param array $controllers The v2 service map.
+	 *
+	 * @return array The v2 service map.
+	 */
+	public static function register_v2_services( array $controllers ): array {
+		return array( 'tally_display' => Tally_Display_Controller::class ) + $controllers;
+	}
+
+	/**
+	 * TallyUI fork (ADR-085 U7): register `wp wcpos tally-display` from Init, which
+	 * both the standalone and the Pro-bundled load paths construct.
+	 */
+	public static function register_cli_commands(): void {
+		if ( \defined( 'WP_CLI' ) && WP_CLI ) {
+			\WP_CLI::add_command( 'wcpos tally-display', \WCPOS\WooCommercePOS\CLI\Tally_Display_Command::class ); // @phpstan-ignore-line -- WP_CLI exists only under wp-cli.
+		}
 	}
 }

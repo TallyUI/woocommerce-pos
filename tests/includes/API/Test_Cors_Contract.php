@@ -63,6 +63,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		'If-None-Match',
 		'X-WCPOS-Protocol',
 		'X-WCPOS-Client',
+		'X-Tally-Display-Token', // TallyUI fork: ADR-085 U7 display routes.
 	);
 
 	/**
@@ -98,6 +99,7 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		'X-WCPOS-Store',
 		'X-WCPOS-Protocol',
 		'X-WCPOS-Client',
+		'X-Tally-Display-Token', // TallyUI fork: ADR-085 U7 display routes.
 	);
 
 	/**
@@ -376,6 +378,21 @@ class Test_Cors_Contract extends WCPOS_REST_Unit_Test_Case {
 		}
 		$this->assertSame( count( $filtered ), count( array_unique( $filtered ) ) );
 		$this->assertSame( $preflight, $filtered, 'The two publishers must produce the same allow-list.' );
+	}
+
+	/**
+	 * TallyUI fork (ADR-085 U7): the test-only claim source header is never
+	 * allowed while WCPOS_TALLY_DISPLAY_TEST_HOOKS is undefined.
+	 */
+	public function test_the_tally_test_source_header_is_not_allowed_without_the_constant(): void {
+		$server = $this->new_spy_server();
+		Rest_Cors::rest_pre_serve_request( false, new WP_REST_Response(), new WP_REST_Request( 'OPTIONS', '/wcpos/v2/tally/display/claim' ), $server );
+		$filtered = apply_filters( 'rest_allowed_cors_headers', self::CORE_ALLOW_DEFAULTS, $this->wp_rest_get_request( self::CURRENT_LANE_ROUTE ) );
+
+		$this->assertFalse( \defined( 'WCPOS_TALLY_DISPLAY_TEST_HOOKS' ) );
+		$this->assertContains( 'X-Tally-Display-Token', $this->allow_list( $server ) );
+		$this->assertNotContains( 'X-Tally-Test-Source', $this->allow_list( $server ) );
+		$this->assertNotContains( 'X-Tally-Test-Source', $filtered );
 	}
 
 	/**

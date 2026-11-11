@@ -203,7 +203,10 @@ final class Rest_Cors {
 	 * @return string[] $allow_headers
 	 */
 	public static function allowed_cors_headers( array $allow_headers ): array {
-		return Sync\Cors::allow_headers( array_merge( $allow_headers, self::ALLOW_HEADERS_BASE ) );
+		$allow_headers = Sync\Cors::allow_headers( array_merge( $allow_headers, self::ALLOW_HEADERS_BASE ) );
+
+		// TallyUI fork: the customer display routes' token (and, under the test hooks, source) header.
+		return array_values( array_unique( array_merge( $allow_headers, Services\Tally_Display\Test_Hooks::cors_headers() ) ) );
 	}
 
 	/**
