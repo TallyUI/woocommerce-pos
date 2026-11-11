@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Services\Tally_Display\Advertisement;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Health;
@@ -32,10 +33,12 @@ final class Status_Controller extends WP_REST_Controller {
 	 * - `order_create_v5`: `POST /wcpos/v2/push/orders` takes TallyUI order.create v5 creates mapped to the
 	 *   WooCommerce shape: `fee_lines`, `shipping_lines` (`method_id` `pos` allowed) and custom `product_id: 0`
 	 *   lines priced and taxed from `_woocommerce_pos_data`, idempotent on `mutationId` (#2137).
+	 * - `customer_display` (TallyUI fork): the `wcpos/v2/tally/display` signalling routes, advertised in the
+	 *   top-level `customer_display` object (docs/tally/customer-display-signalling.md).
 	 *
 	 * Append new names; never rename or remove one.
 	 */
-	private const CAPABILITIES = array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5' );
+	private const CAPABILITIES = array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5', 'customer_display' );
 
 	/**
 	 * Register the sync status route.
@@ -62,11 +65,12 @@ final class Status_Controller extends WP_REST_Controller {
 
 		return new WP_REST_Response(
 			array(
-				'healthy'        => array() === $missing_tables,
-				'missing_tables' => $missing_tables,
-				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
-				'capabilities'   => self::CAPABILITIES,
-				'wcpos_version'  => VERSION,
+				'healthy'          => array() === $missing_tables,
+				'missing_tables'   => $missing_tables,
+				'schema_version'   => get_option( Api::SCHEMA_OPTION, null ),
+				'capabilities'     => self::CAPABILITIES,
+				'wcpos_version'    => VERSION,
+				'customer_display' => Advertisement::get(),
 			),
 			200
 		);

@@ -156,15 +156,23 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertSame(
 			array(
-				'healthy'        => false,
-				'missing_tables' => array(
+				'healthy'          => false,
+				'missing_tables'   => array(
 					$wpdb->prefix . 'wcpos_sync_journal',
 					$wpdb->prefix . 'wcpos_sync_stored_digest',
 					$wpdb->prefix . 'wcpos_sync_mutations',
 				),
-				'schema_version' => null,
-				'capabilities'   => array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5' ),
-				'wcpos_version'  => VERSION,
+				'schema_version'   => null,
+				'capabilities'     => array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5', 'customer_display' ),
+				'wcpos_version'    => VERSION,
+				'customer_display' => array(
+					'v'          => 1,
+					'iceServers' => array(
+						array( 'urls' => 'stun:stun.cloudflare.com:3478' ),
+						array( 'urls' => 'stun:stun.l.google.com:19302' ),
+					),
+					'snapshot'   => 1,
+				),
 			),
 			$response->get_data()
 		);
@@ -183,11 +191,19 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertSame(
 			array(
-				'healthy'        => true,
-				'missing_tables' => array(),
-				'schema_version' => Api::SCHEMA_VERSION,
-				'capabilities'   => array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5' ),
-				'wcpos_version'  => VERSION,
+				'healthy'          => true,
+				'missing_tables'   => array(),
+				'schema_version'   => Api::SCHEMA_VERSION,
+				'capabilities'     => array( 'products_id_fast_path', 'order_payments_list', 'order_create_v5', 'customer_display' ),
+				'wcpos_version'    => VERSION,
+				'customer_display' => array(
+					'v'          => 1,
+					'iceServers' => array(
+						array( 'urls' => 'stun:stun.cloudflare.com:3478' ),
+						array( 'urls' => 'stun:stun.l.google.com:19302' ),
+					),
+					'snapshot'   => 1,
+				),
 			),
 			$response->get_data()
 		);

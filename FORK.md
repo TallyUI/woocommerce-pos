@@ -21,6 +21,16 @@ Both are reapplied as plain `git revert`s of upstream's revert commits (`1a979e1
 
 The tests that pin it are `tests/includes/Sync/Test_Rest_Dispatch_Tally_Order_Create_V5.php` and `tests/includes/Sync/Test_Sync_Status.php`.
 
+3. **Customer display signalling** (TallyUI ADR-085 U7), new code with no upstream counterpart:
+   - The routes `wcpos/v2/tally/display/*` (`API/V2/Tally_Display_Controller`, added to the v2 service map from `Sync/Api.php`) pair a customer display to a till, relay WebRTC signalling and hold the latest display snapshot.
+   - The rules live in `Services/Tally_Display/`. The six tables `wp_wcpos_tally_display_{codes,pending,displays,signals,snapshots,failures}` are created on first use.
+   - A signal lives 5 minutes and an inbox keeps its newest 200; `uninstall.php` drops the six tables.
+   - A till's `device_id` is a bearer secret of 32 to 64 characters, stored only as its SHA-256 and never returned.
+   - `/wcpos/v2/status` lists `customer_display` in `capabilities` and adds the `customer_display` advertisement object. `Rest_Cors` allows `X-Tally-Display-Token`.
+   - `wp wcpos tally-display counts|dump|reset` (`CLI/Tally_Display_Command`, registered from `Init`) works only under `WCPOS_TALLY_DISPLAY_TEST_HOOKS`.
+   - The route document is `docs/tally/customer-display-signalling.md`, with every departure from TallyUI's reference server.
+   - The tests are `tests/includes/API/Test_Tally_Display_{Harness,Contract,Routes}.php` and `tests/includes/Services/Test_Tally_Display_Rate_Limit_Source.php`, plus the additions to `Test_Sync_Status.php` and `Test_Cors_Contract.php` and the display routes in `Test_Route_Classifier.php`'s expected lists.
+
 ## Syncing with upstream
 
 Merge upstream `main` into `tally` at every upstream release, and at least weekly:
@@ -31,7 +41,7 @@ git checkout main && git merge --ff-only upstream/main && git push origin main
 git checkout tally && git merge main
 ```
 
-Never rebase or force-push `tally`. After each merge, check that `order_create_v5` is still in `Status_Controller::CAPABILITIES`, and run the two test files above.
+Never rebase or force-push `tally`. After each merge, check that `order_create_v5` is still in `Status_Controller::CAPABILITIES`, and run the two test files above and the `Tally_Display` tests of item 3.
 
 If upstream lands PR 2140 with commits other than `1a979e12` and `415a6d4a` (a squash, for example), merging it removes the v5 work without a conflict. Fix this on `tally` with `git revert <that upstream commit>`.
 

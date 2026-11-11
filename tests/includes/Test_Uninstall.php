@@ -22,6 +22,7 @@ use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Analytics_Profile;
 use WCPOS\WooCommercePOS\Services\Lifecycle_Events;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
+use WCPOS\WooCommercePOS\Services\Tally_Display\Store;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Journal_Purge;
@@ -298,6 +299,24 @@ class Test_Uninstall extends WP_UnitTestCase {
 				substr( $table, \strlen( $wpdb->prefix ) ),
 				$suffixes,
 				"uninstall.php must drop {$table}"
+			);
+		}
+	}
+
+	/**
+	 * The hardcoded uninstall table list must cover every customer display
+	 * signalling table (TallyUI fork), asserted via Store so a new table fails here.
+	 */
+	public function test_uninstall_table_list_covers_tally_display_tables(): void {
+		global $wpdb;
+
+		$suffixes = woocommerce_pos_uninstall_table_suffixes();
+		$this->assertCount( 6, Store::TABLES );
+		foreach ( Store::TABLES as $table ) {
+			$this->assertContains(
+				substr( Store::table( $table ), \strlen( $wpdb->prefix ) ),
+				$suffixes,
+				'uninstall.php must drop ' . Store::table( $table )
 			);
 		}
 	}

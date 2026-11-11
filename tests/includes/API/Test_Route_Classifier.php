@@ -137,6 +137,12 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 				'/wcpos/v1/auth/test',
 				'/wcpos/v1/auth/refresh',
 				'/wcpos/v1/print-jobs/relay-verification',
+				// TallyUI fork (ADR-085 U7): the customer display routes come first in the v2 map.
+				'/wcpos/v2/tally/display/claim',
+				'/wcpos/v2/tally/display/collect',
+				'/wcpos/v2/tally/display/signals',
+				'/wcpos/v2/tally/display/signals/receive/display',
+				'/wcpos/v2/tally/display/snapshot',
 				'/wcpos/v2/ping',
 				'/wcpos/v2/echo',
 				'/wcpos/v2/site',
@@ -164,7 +170,7 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$built_classifications['admin_op']
 		);
 		$this->assertSame(
-			array( '/wcpos/v1/receipts/', '/wcpos/v2/receipts/' ),
+			array( '/wcpos/v1/receipts/', '/wcpos/v2/tally/display/', '/wcpos/v2/receipts/' ),
 			$built_classifications['permission_error_passthrough']
 		);
 		$this->assertSame(

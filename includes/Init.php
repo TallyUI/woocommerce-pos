@@ -53,6 +53,7 @@ class Init {
 				$this->visibility_observer = null;
 			}
 		}
+		Sync\Api::register_cli_commands(); // TallyUI fork: ADR-085 U7.
 	}
 
 	/**
