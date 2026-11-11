@@ -53,6 +53,13 @@ function woocommerce_pos_uninstall_table_suffixes(): array {
 		// Legacy (pre-unified-journal) tables.
 		'wcpos_sync_change_log',
 		'wcpos_sync_order_index',
+		// TallyUI fork: the customer display signalling tables (Services/Tally_Display/Store).
+		'wcpos_tally_display_codes',
+		'wcpos_tally_display_pending',
+		'wcpos_tally_display_displays',
+		'wcpos_tally_display_signals',
+		'wcpos_tally_display_snapshots',
+		'wcpos_tally_display_failures',
 	);
 }
 

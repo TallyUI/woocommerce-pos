@@ -20,7 +20,7 @@ Code:
 
 ## Routes
 
-Namespace `wcpos/v2`, prefix `tally/display`. Till routes need a logged-in user with `access_woocommerce_pos` (narrowed by the filter `woocommerce_pos_tally_display_can_pair`) and a `device_id` matching `^[A-Za-z0-9_-]{1,64}$`. Display routes are public: they carry the display token in `X-Tally-Display-Token`, or nothing before pairing.
+Namespace `wcpos/v2`, prefix `tally/display`. Till routes need a logged-in user with `access_woocommerce_pos` (narrowed by the filter `woocommerce_pos_tally_display_can_pair`) and a `device_id` matching `^[A-Za-z0-9_-]{32,64}$` (see [The device id](#the-device-id)). Display routes are public: they carry the display token in `X-Tally-Display-Token`, or nothing before pairing.
 
 In the examples, `$S` is the site, `$JWT` a cashier's token, and `$T` a display token.
 
@@ -40,15 +40,15 @@ In the examples, `$S` is the site, `$JWT` a cashier's token, and `$T` a display 
 
 ```sh
 H=(-H "Authorization: Bearer $JWT" -H 'X-WCPOS: 1' -H 'Content-Type: application/json')
-curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/codes" -d '{"device_id":"till-a"}'
-curl -s "${H[@]}" "$S/wp-json/wcpos/v2/tally/display/pending?device_id=till-a"
-curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/pending/$CLAIM/confirm" -d '{"device_id":"till-a"}'
-curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/pending/$CLAIM/decline" -d '{"device_id":"till-a"}'
-curl -s "${H[@]}" "$S/wp-json/wcpos/v2/tally/display/displays?device_id=till-a"
-curl -s "${H[@]}" -X DELETE "$S/wp-json/wcpos/v2/tally/display/displays/$DISPLAY?device_id=till-a"
-curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/displays/$DISPLAY/signals" -d '{"device_id":"till-a","type":"offer","payload":"…"}'
-curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/signals/receive" -d '{"device_id":"till-a"}'
-curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/displays/$DISPLAY/snapshot?device_id=till-a" -d '{"seq":1}'
+curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/codes" -d '{"device_id":"0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e"}'
+curl -s "${H[@]}" "$S/wp-json/wcpos/v2/tally/display/pending?device_id=0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e"
+curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/pending/$CLAIM/confirm" -d '{"device_id":"0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e"}'
+curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/pending/$CLAIM/decline" -d '{"device_id":"0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e"}'
+curl -s "${H[@]}" "$S/wp-json/wcpos/v2/tally/display/displays?device_id=0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e"
+curl -s "${H[@]}" -X DELETE "$S/wp-json/wcpos/v2/tally/display/displays/$DISPLAY?device_id=0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e"
+curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/displays/$DISPLAY/signals" -d '{"device_id":"0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e","type":"offer","payload":"…"}'
+curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/signals/receive" -d '{"device_id":"0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e"}'
+curl -s "${H[@]}" -X POST "$S/wp-json/wcpos/v2/tally/display/displays/$DISPLAY/snapshot?device_id=0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e" -d '{"seq":1}'
 ```
 
 ### Display
@@ -80,11 +80,27 @@ A claim that sends its current `token` moves that display to the confirming till
 - A display is `connected` when seen in the last 30 s. Displays unseen for 30 days, expired codes and their claims are pruned at every call.
 - Claim secrets and tokens are 128-bit base64url, stored only as SHA-256 hex.
 
+## Signal limits
+
+- A signal lives 5 minutes (`Signalling::SIGNAL_TTL`); every call prunes older ones. A WebRTC offer, answer or ICE candidate that old is useless, and the peers renegotiate.
+- An inbox, one direction of one pairing, holds its newest 200 messages (`SIGNAL_INBOX_MAX`). A send past that drops the oldest and still answers `{queued: true}`: signalling recovers from a lost old candidate, not from a refused new offer.
+- Schema version 2 added `signals.queued_at`. Rows queued before it read `0`, so the first prune after the upgrade deletes them.
+- Uninstall drops the six tables; its option sweep already deletes `woocommerce_pos_tally_display_db_version` and `woocommerce_pos_tally_display_ice_servers`.
+
+## The device id
+
+- A till's `device_id` is a bearer secret: 32 to 64 characters of `A-Z a-z 0-9 _ -`, which is 74 or more random bits, so no one can guess another till's id. TallyUI sends a uuidv7 (36 characters).
+- The controller hashes it with SHA-256 before the service runs. The tables and the CLI `dump` hold only the hash, and no response body or header carries the id, plaintext or hashed. Error messages are the fixed strings below.
+- A till sees only what its own id paired. Another till, whoever is signed in, gets `tally_display_not_found` for this till's claims and displays, and empty lists.
+- The id is not bound to the signed-in user, because a till keeps its id across cashier sign-ins and a binding would darken its display at every shift change.
+- Schema version 2 keys rows by the hash, so an upgrade from version 1 deletes every row in `codes`, `pending`, `displays`, `signals` and `snapshots`, and displays pair again once.
+- Accepted risk: anyone holding a till's local storage can act as that till until the server-issued device key lands.
+
 ## Errors
 
 | Code | Status | When |
 |---|---|---|
-| `tally_display_forbidden` | 403 | logged in without the capability, or a missing or malformed `device_id` |
+| `tally_display_forbidden` | 403 | logged in without the capability, or a missing, malformed or too short `device_id` |
 | `tally_display_limit` | 429 | a 6th unspent code |
 | `tally_display_claim_refused` | 403 | any refused claim: unknown, spent or expired code, a limited source, the store-wide pause |
 | `tally_display_collect_refused` | 403 | any refused collect: unknown, declined, expired or already-collected secret |

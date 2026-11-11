@@ -24,6 +24,8 @@ The tests that pin it are `tests/includes/Sync/Test_Rest_Dispatch_Tally_Order_Cr
 3. **Customer display signalling** (TallyUI ADR-085 U7), new code with no upstream counterpart:
    - The routes `wcpos/v2/tally/display/*` (`API/V2/Tally_Display_Controller`, added to the v2 service map from `Sync/Api.php`) pair a customer display to a till, relay WebRTC signalling and hold the latest display snapshot.
    - The rules live in `Services/Tally_Display/`. The six tables `wp_wcpos_tally_display_{codes,pending,displays,signals,snapshots,failures}` are created on first use.
+   - A signal lives 5 minutes and an inbox keeps its newest 200; `uninstall.php` drops the six tables.
+   - A till's `device_id` is a bearer secret of 32 to 64 characters, stored only as its SHA-256 and never returned.
    - `/wcpos/v2/status` lists `customer_display` in `capabilities` and adds the `customer_display` advertisement object. `Rest_Cors` allows `X-Tally-Display-Token`.
    - `wp wcpos tally-display counts|dump|reset` (`CLI/Tally_Display_Command`, registered from `Init`) works only under `WCPOS_TALLY_DISPLAY_TEST_HOOKS`.
    - The route document is `docs/tally/customer-display-signalling.md`, with every departure from TallyUI's reference server.

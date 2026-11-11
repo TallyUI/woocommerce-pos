@@ -20,8 +20,9 @@ use WP_REST_Response;
  * print), and each test starts from emptied tables.
  */
 abstract class Test_Tally_Display_Harness extends WCPOS_REST_Unit_Test_Case {
-	const A      = 'till-a';
-	const B      = 'till-b';
+	/** Two tills' device ids: uuidv7, as TallyUI makes them (36 characters, at least the 32 the routes need). */
+	const A      = '0192f5a8-3c1e-7a4b-9d2e-5f6a7b8c9d0e';
+	const B      = '0192f5a8-3c1e-7c4d-8e1f-0a1b2c3d4e5f';
 	const MINUTE = 60000;
 	const DAY    = 86400000;
 	const SECRET = '/^[A-Za-z0-9_-]{22,}$/D';
@@ -64,6 +65,13 @@ abstract class Test_Tally_Display_Harness extends WCPOS_REST_Unit_Test_Case {
 	 * @var string
 	 */
 	protected $source = '192.0.2.1';
+
+	/**
+	 * Called with each request and its response, when set.
+	 *
+	 * @var callable(WP_REST_Request, WP_REST_Response): void|null
+	 */
+	protected $observe;
 
 	/** A fresh world: empty tables, a fixed clock, three cashiers. */
 	public function setUp(): void {
@@ -136,7 +144,12 @@ abstract class Test_Tally_Display_Harness extends WCPOS_REST_Unit_Test_Case {
 			$request->set_body( $raw ? (string) $body : (string) wp_json_encode( $body ) );
 		}
 
-		return $this->server->dispatch( $request );
+		$response = $this->server->dispatch( $request );
+		if ( null !== $this->observe ) {
+			( $this->observe )( $request, $response );
+		}
+
+		return $response;
 	}
 
 	/**

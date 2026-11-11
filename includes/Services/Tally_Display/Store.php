@@ -16,8 +16,8 @@ final class Store {
 	/** The fork-only schema version option. */
 	const VERSION_OPTION = 'woocommerce_pos_tally_display_db_version';
 
-	/** The schema version this code creates. */
-	const VERSION = '1';
+	/** The schema version this code creates. 2 added signals.queued_at and the inbox key, and keys rows by the device id's hash. */
+	const VERSION = '2';
 
 	/** The table names, without the prefix. */
 	const TABLES = array( 'codes', 'pending', 'displays', 'signals', 'snapshots', 'failures' );
@@ -46,10 +46,19 @@ final class Store {
 			return;
 		}
 		self::$checked = true;
-		if ( self::VERSION === get_option( self::VERSION_OPTION ) ) {
+		$from = get_option( self::VERSION_OPTION );
+		if ( self::VERSION === $from ) {
 			return;
 		}
 		self::install();
+		if ( '1' === $from ) {
+			// Version 1 keyed rows by the plaintext device id; version 2 keys them by its hash,
+			// so the old rows can never match again. Displays re-pair once.
+			global $wpdb;
+			foreach ( array( 'codes', 'pending', 'displays', 'signals', 'snapshots' ) as $table ) {
+				$wpdb->query( 'DELETE FROM ' . self::table( $table ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
+			}
+		}
 	}
 
 	/** Run dbDelta for every table and record the version. */
@@ -111,8 +120,11 @@ display_id char(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
 to_till tinyint(1) NOT NULL,
 type varchar(8) NOT NULL,
 payload mediumtext NOT NULL,
+queued_at bigint(20) NOT NULL DEFAULT 0,
 PRIMARY KEY  (id),
-KEY display_id (display_id)',
+KEY display_id (display_id),
+KEY queued_at (queued_at),
+KEY inbox (display_id,to_till,id)',
 			'snapshots' => 'display_id char(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
 body mediumtext NOT NULL,
 posted_at bigint(20) NOT NULL,

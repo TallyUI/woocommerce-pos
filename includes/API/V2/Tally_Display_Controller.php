@@ -30,8 +30,12 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	/** The display token header; never Authorization, which the JWT auth parses. */
 	const TOKEN_HEADER = Test_Hooks::TOKEN_HEADER;
 
-	/** A till device id. */
-	const DEVICE_ID = '/^[A-Za-z0-9_-]{1,64}$/D';
+	/**
+	 * A till device id: a bearer secret, hashed before any service sees it.
+	 * At least 32 characters carry 74 or more random bits, so no one can guess
+	 * another till's id. TallyUI's ids are uuidv7, 36 characters.
+	 */
+	const DEVICE_ID = '/^[A-Za-z0-9_-]{32,64}$/D';
 
 	/** A path id pattern. */
 	const ID = '(?P<%s>[A-Za-z0-9_-]+)';
@@ -211,7 +215,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function mint( WP_REST_Request $request ) {
-		return self::respond( $this->signalling->mint( (string) $this->device_id( $request, true ), get_current_user_id() ) );
+		return self::respond( $this->signalling->mint( $this->device_key( $request, true ), get_current_user_id() ) );
 	}
 
 	/**
@@ -220,7 +224,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 * @param WP_REST_Request $request The request.
 	 */
 	public function pending( WP_REST_Request $request ): WP_REST_Response {
-		return new WP_REST_Response( $this->signalling->pending( (string) $this->device_id( $request, true ) ), 200 );
+		return new WP_REST_Response( $this->signalling->pending( $this->device_key( $request, true ) ), 200 );
 	}
 
 	/**
@@ -231,7 +235,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function confirm( WP_REST_Request $request ) {
-		$result = $this->signalling->confirm( (string) $this->device_id( $request, true ), self::path_id( $request, 'claim_id' ), get_current_user_id() );
+		$result = $this->signalling->confirm( $this->device_key( $request, true ), self::path_id( $request, 'claim_id' ), get_current_user_id() );
 
 		return self::respond( $result, array( 'confirmed' => true ) );
 	}
@@ -244,7 +248,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function decline( WP_REST_Request $request ) {
-		$result = $this->signalling->decline( (string) $this->device_id( $request, true ), self::path_id( $request, 'claim_id' ) );
+		$result = $this->signalling->decline( $this->device_key( $request, true ), self::path_id( $request, 'claim_id' ) );
 
 		return self::respond( $result, array( 'declined' => true ) );
 	}
@@ -255,7 +259,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 * @param WP_REST_Request $request The request.
 	 */
 	public function list_displays( WP_REST_Request $request ): WP_REST_Response {
-		return new WP_REST_Response( $this->signalling->list_displays( (string) $this->device_id( $request, true ) ), 200 );
+		return new WP_REST_Response( $this->signalling->list_displays( $this->device_key( $request, true ) ), 200 );
 	}
 
 	/**
@@ -266,7 +270,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function forget( WP_REST_Request $request ) {
-		$result = $this->signalling->forget( (string) $this->device_id( $request, true ), self::path_id( $request, 'display_id' ) );
+		$result = $this->signalling->forget( $this->device_key( $request, true ), self::path_id( $request, 'display_id' ) );
 
 		return self::respond( $result, array( 'forgotten' => true ) );
 	}
@@ -280,7 +284,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 */
 	public function send_signal( WP_REST_Request $request ) {
 		$result = $this->signalling->send_signal(
-			(string) $this->device_id( $request, true ),
+			$this->device_key( $request, true ),
 			self::path_id( $request, 'display_id' ),
 			(string) $request->get_param( 'type' ),
 			(string) $request->get_param( 'payload' )
@@ -295,7 +299,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 	 * @param WP_REST_Request $request The request.
 	 */
 	public function receive_signals( WP_REST_Request $request ): WP_REST_Response {
-		return new WP_REST_Response( $this->signalling->receive_signals( (string) $this->device_id( $request, true ) ), 200 );
+		return new WP_REST_Response( $this->signalling->receive_signals( $this->device_key( $request, true ) ), 200 );
 	}
 
 	/**
@@ -311,7 +315,7 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 		if ( '' === trim( $raw ) || JSON_ERROR_NONE !== json_last_error() ) {
 			return new WP_Error( 'rest_invalid_param', 'The snapshot body is not JSON.', array( 'status' => 400 ) );
 		}
-		$result = $this->signalling->post_snapshot( (string) $this->device_id( $request, false ), self::path_id( $request, 'display_id' ), $raw );
+		$result = $this->signalling->post_snapshot( $this->device_key( $request, false ), self::path_id( $request, 'display_id' ), $raw );
 
 		return self::respond( $result, array( 'stored' => true ) );
 	}
@@ -451,6 +455,17 @@ final class Tally_Display_Controller extends WP_REST_Controller {
 		}
 
 		return $request->get_body_params()['device_id'] ?? null;
+	}
+
+	/**
+	 * The validated device id's SHA-256 hex: the only form the service, the
+	 * tables and the CLI ever see. The plaintext is never stored or echoed.
+	 *
+	 * @param WP_REST_Request $request   The request.
+	 * @param bool            $from_body Whether the body may carry it.
+	 */
+	private function device_key( WP_REST_Request $request, bool $from_body ): string {
+		return Signalling::hash( (string) $this->device_id( $request, $from_body ) );
 	}
 
 	/**

@@ -18,6 +18,8 @@ use WP_Error;
  * Secrets (claim secrets, tokens) are stored only as SHA-256 hex and looked
  * up through indexed columns. The token is made at the first collect after
  * the confirm, as the reference does, so its plaintext is never stored.
+ * Every `$device_id` here is already the SHA-256 hex of the till's id: the
+ * controller hashes it, so the plaintext never reaches this class.
  */
 final class Signalling {
 	const MINUTE             = 60000;
@@ -33,6 +35,8 @@ final class Signalling {
 	const CONNECTED_MS       = 30000;
 	const ROW_TTL            = 2592000000;  // 30 days.
 	const NAME_MAX           = 64;
+	const SIGNAL_TTL         = 300000;  // 5 minutes: an older WebRTC offer, answer or ICE candidate is useless, and the peers renegotiate.
+	const SIGNAL_INBOX_MAX   = 200;  // One inbox (one direction of one pairing) keeps its newest 200 messages.
 
 	/** Each seam error code's HTTP status. */
 	const STATUSES = array(
@@ -90,6 +94,7 @@ final class Signalling {
 		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . Store::table( 'pending' ) . ' WHERE expires_at <= %d', $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
 		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . Store::table( 'snapshots' ) . ' WHERE posted_at <= %d', $now - self::SNAPSHOT_TTL ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
 		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . Store::table( 'failures' ) . ' WHERE failed_at <= %d', $now - self::STORE_WINDOW ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . Store::table( 'signals' ) . ' WHERE queued_at <= %d', $now - self::SIGNAL_TTL ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
 		$stale = $wpdb->get_col( $wpdb->prepare( 'SELECT display_id FROM ' . Store::table( 'displays' ) . ' WHERE COALESCE(last_seen_at, confirmed_at) <= %d', $now - self::ROW_TTL ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
 		foreach ( $stale as $display_id ) {
 			$this->drop_display( (string) $display_id );
@@ -554,7 +559,9 @@ final class Signalling {
 	}
 
 	/**
-	 * Queue one message.
+	 * Queue one message, then trim its inbox to the newest SIGNAL_INBOX_MAX.
+	 * The sender gets no error: signalling recovers from a dropped old
+	 * candidate, not from a refused new offer.
 	 *
 	 * @param string $display_id The display.
 	 * @param bool   $to_till    Whether the message goes to the owning till.
@@ -575,9 +582,13 @@ final class Signalling {
 				'to_till'    => $to_till ? 1 : 0,
 				'type'       => $type,
 				'payload'    => $payload,
+				'queued_at'  => Clock::now_ms(),
 			),
-			array( '%s', '%d', '%s', '%s' )
+			array( '%s', '%d', '%s', '%s', '%d' )
 		);
+		$signals = Store::table( 'signals' );
+		// The id of the newest message past the cap; it and every older one go. The derived table lets MySQL read the table it deletes from.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$signals} WHERE display_id = %s AND to_till = %d AND id <= (SELECT id FROM (SELECT id FROM {$signals} WHERE display_id = %s AND to_till = %d ORDER BY id DESC LIMIT 1 OFFSET %d) AS cut)", $display_id, $to_till ? 1 : 0, $display_id, $to_till ? 1 : 0, self::SIGNAL_INBOX_MAX ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
 
 		return true;
 	}
