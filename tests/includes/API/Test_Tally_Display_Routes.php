@@ -310,6 +310,10 @@ class Test_Tally_Display_Routes extends Test_Tally_Display_Harness {
 			$this->refusal( $this->mint( $u, $leak . '!' ), 'forbidden', 'a malformed device id' );
 			$this->refusal( $this->mint( $this->viewer, $leak ), 'forbidden', 'a cashier the filter refuses' );
 			$this->assertSame( 401, $this->mint( 0, $leak )->get_status(), 'a logged-out till' );
+			// The status advertisement, while the paired display's row still holds the device key.
+			$status = $this->call( 'GET', '/wcpos/v2/status', $u );
+			$this->assertSame( 200, $status->get_status(), 'the status route' );
+			$this->assertArrayHasKey( 'iceServers', $status->get_data()['customer_display'], 'the status advertisement' );
 			$this->assertSame( array( 'declined' => true ), $this->ok( $this->till( 'POST', 'pending/' . $wait['claim_id'] . '/decline', $u, $leak ) ) );
 			$this->assertSame( array( 'forgotten' => true ), $this->ok( $this->till( 'DELETE', 'displays/' . $paired['display_id'], $u, $leak ) ) );
 			error_log( 'tally-leak canary' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -325,6 +329,7 @@ class Test_Tally_Display_Routes extends Test_Tally_Display_Harness {
 		$this->assertStringContainsString( 'tally-leak canary', $log, 'the error log capture is not live' );
 		$this->assertContains( 'tally-leak canary', $logged, 'the plugin logger capture is not live' );
 		$this->assertGreaterThan( 25, \count( $served ), 'the response capture missed routes' );
+		$this->assertCount( 1, preg_grep( '#^GET /wcpos/v2/status #', $served ), 'the response capture missed the status route' );
 		$meta = array(
 			$wpdb->postmeta => array( 'meta_key', 'meta_value' ),
 			$wpdb->usermeta => array( 'meta_key', 'meta_value' ),
