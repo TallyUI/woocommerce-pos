@@ -122,7 +122,7 @@ abstract class Test_Tally_Display_Harness extends WCPOS_REST_Unit_Test_Case {
 	 * Dispatch a request under the namespace.
 	 *
 	 * @param string      $method  The method.
-	 * @param string      $path    The path under tally/display.
+	 * @param string      $path    The path under tally/display, or a full route when it starts with `/`.
 	 * @param int         $user    The user, or 0.
 	 * @param array|null  $query   Query params.
 	 * @param mixed       $body    A JSON body (encoded here), or a raw string when $raw.
@@ -131,7 +131,8 @@ abstract class Test_Tally_Display_Harness extends WCPOS_REST_Unit_Test_Case {
 	 */
 	protected function call( string $method, string $path, int $user, ?array $query = null, $body = null, array $headers = array(), bool $raw = false ): WP_REST_Response {
 		wp_set_current_user( $user );
-		$request = new WP_REST_Request( $method, '/wcpos/v2/tally/display/' . $path );
+		$route   = 0 === strpos( $path, '/' ) ? $path : '/wcpos/v2/tally/display/' . $path;
+		$request = new WP_REST_Request( $method, $route );
 		$request->set_header( 'X-WCPOS', '1' );
 		foreach ( $headers as $name => $value ) {
 			$request->set_header( $name, $value );
