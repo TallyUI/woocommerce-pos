@@ -22,6 +22,14 @@ use WP_REST_Request;
  */
 class Cash extends Abstract_POS_Gateway {
 	/**
+	 * TallyUI fork (ADR-094): the cash rounding increments a store may choose, as
+	 * decimal strings; '' is no rounding. Copied from upstream
+	 * `Services\Settings\Payment_Gateways_Section::ROUNDING_INCREMENTS`
+	 * (wcpos/woocommerce-pos 0e4370ef, 1941852f).
+	 */
+	const ROUNDING_INCREMENTS = array( '', '0.05', '0.10', '0.25', '0.50', '1', '5', '10' );
+
+	/**
 	 * Constructor for the gateway.
 	 */
 	public function __construct() {
@@ -32,6 +40,8 @@ class Cash extends Abstract_POS_Gateway {
 		$this->has_fields  = true;
 		$this->enabled     = 'no';
 		$this->supports    = array( 'products', 'refunds' );
+		// TallyUI fork (ADR-094): WooCommerce never builds the form fields itself.
+		$this->init_form_fields();
 
 		// Actions.
 		// @phpstan-ignore-next-line.
@@ -44,6 +54,42 @@ class Cash extends Abstract_POS_Gateway {
 		);
 		add_action( 'woocommerce_thankyou_pos_cash', array( $this, 'calculate_change' ) );
 		$this->register_pos_gateway_contract_hooks();
+	}
+
+	/**
+	 * TallyUI fork (ADR-094): the gateway's settings form carries the cash
+	 * rounding increment that `GET wcpos/v2/payment-methods` advertises.
+	 */
+	public function init_form_fields(): void {
+		$options = array();
+		foreach ( self::ROUNDING_INCREMENTS as $increment ) {
+			$options[ $increment ] = '' === $increment
+				? /* translators: Cash rounding option that turns rounding off. */ __( 'No rounding', 'woocommerce-pos' )
+				: $increment;
+		}
+
+		$this->form_fields = array(
+			'rounding_increment' => array(
+				'title'       => /* translators: Settings field label for the cash rounding increment. */ __( 'Cash rounding', 'woocommerce-pos' ),
+				'type'        => 'select',
+				'description' => /* translators: Settings field help for the cash rounding increment. */ __( 'Round cash totals at the till to the nearest increment.', 'woocommerce-pos' ),
+				'default'     => '',
+				'options'     => $options,
+			),
+		);
+	}
+
+	/**
+	 * TallyUI fork (ADR-094): WooCommerce's per-field validator. A value off the
+	 * list stores as '' (no rounding), as upstream 1941852f does.
+	 *
+	 * @param string $key   Field key.
+	 * @param mixed  $value Posted value.
+	 */
+	public function validate_rounding_increment_field( $key, $value ): string {
+		$value = \is_scalar( $value ) ? (string) $value : '';
+
+		return \in_array( $value, self::ROUNDING_INCREMENTS, true ) ? $value : '';
 	}
 
 	/**

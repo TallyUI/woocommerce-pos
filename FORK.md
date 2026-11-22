@@ -31,6 +31,12 @@ The tests that pin it are `tests/includes/Sync/Test_Rest_Dispatch_Tally_Order_Cr
    - The route document is `docs/tally/customer-display-signalling.md`, with every departure from TallyUI's reference server.
    - The tests are `tests/includes/API/Test_Tally_Display_{Harness,Contract,Routes}.php` and `tests/includes/Services/Test_Tally_Display_Rate_Limit_Source.php`, plus the additions to `Test_Sync_Status.php` and `Test_Cors_Contract.php` and the display routes in `Test_Route_Classifier.php`'s expected lists.
 
+4. **`GET wcpos/v2/payment-methods` and the cash rounding setting** (TallyUI ADR-094), a PHP-only port of a slice of upstream WCPOS 2.0:
+   - The route (`API/V2/Tally_Payment_Methods_Controller`, added to the v2 service map from `Sync/Api.php`) answers `{ schema: 1, contract: '1.3', methods }`. It sends one row per gateway the POS payment gateway settings list, with only the keys `wooPaymentMethods` in `@tallyui/connector-woocommerce` reads. Each value is what upstream's `Payments/Contract/Descriptor_Builder` gives for that gateway. Without this route the connector falls back to its own defaults, which never round.
+   - The cash rounding increment is a `rounding_increment` select on the POS Cash gateway's WooCommerce settings form (`Gateways/Cash`, stored in `woocommerce_pos_cash_settings`). Its choices are `Cash::ROUNDING_INCREMENTS`, copied from upstream's `Payment_Gateways_Section`. The default is no rounding. A value off the list stores as no rounding and is served as `defaults.rounding: null`; only `pos_cash` ever rounds.
+   - It is not an upstream merge: `tally` is far behind upstream, and that merge changes `vendor_prefixed`, `assets`, `packages` and `composer.json`, which the dev store overlay refuses. The setting lives on the gateway because the POS settings app is built JS in `packages/`.
+   - The tests are `tests/includes/API/Test_Tally_Payment_Methods.php` and the cash rounding fee test in `Test_Rest_Dispatch_Tally_Order_Create_V5.php`.
+
 ## Syncing with upstream
 
 Merge upstream `main` into `tally` at every upstream release, and at least weekly:
@@ -42,6 +48,8 @@ git checkout tally && git merge main
 ```
 
 Never rebase or force-push `tally`. After each merge, check that `order_create_v5` is still in `Status_Controller::CAPABILITIES`, and run the two test files above and the `Tally_Display` tests of item 3.
+
+An upstream merge that brings upstream's own `Payment_Methods_Controller` must keep the item 4 route's shape: the envelope, every key the connector reads and `defaults.rounding`. Upstream stores the increment in `Payment_Gateways_Section` (`woocommerce_pos_settings_payment_gateways`, `gateways.pos_cash.rounding_increment`), so that merge must also bring over a value already stored in `woocommerce_pos_cash_settings`, then drop the fork's controller and the Cash form field. Run `Test_Tally_Payment_Methods.php` after each merge.
 
 If upstream lands PR 2140 with commits other than `1a979e12` and `415a6d4a` (a squash, for example), merging it removes the v5 work without a conflict. Fix this on `tally` with `git revert <that upstream commit>`.
 
