@@ -463,6 +463,54 @@ class Test_Rest_Dispatch_Tally_Order_Create_V5 extends Sync_REST_Store_Test_Case
 		$this->assertSame( (string) get_current_user_id(), $order->get_meta( '_pos_user' ) );
 	}
 
+	/** TallyUI fork (ADR-094): taxing the -0.12 cash rounding fee would move the order total below the cash taken. */
+	public function test_v5_cash_rounding_fee_large_enough_to_move_the_total_stays_untaxed(): void {
+		// Arrange.
+		$envelope = $this->fee_golden_envelope();
+		$envelope['mutationId']                       = '0199b0a0-0000-7000-8000-000000000006';
+		$envelope['recordId']                         = '0199b0a0-0000-7000-8000-0000000000a6';
+		$envelope['payload']['meta_data'][0]['value'] = '0199b0a0-0000-7000-8000-0000000000a6';
+		$envelope['payload']['fee_lines'][0]['total'] = '0.10';
+		$envelope['payload']['fee_lines'][]           = array(
+			'name'       => 'Rounding',
+			'total'      => '-0.12',
+			'tax_status' => 'none',
+			'tax_class'  => '',
+		);
+		$envelope['payload']['set_paid']             = true;
+		$envelope['payload']['payment_method']       = 'pos_cash';
+		$envelope['payload']['payment_method_title'] = 'Cash';
+		$payments  = '[{"method":"pos_cash","title":"Cash","amount":"12.00","tendered":"20.00","change":"8.00"}]';
+		$till_meta = array(
+			'_woocommerce_pos_payments' => $payments,
+			'_pos_cash_amount_tendered' => '20.00',
+			'_pos_cash_change'          => '8.00',
+		);
+		foreach ( $till_meta as $key => $value ) {
+			$envelope['payload']['meta_data'][] = array(
+				'key'   => $key,
+				'value' => $value,
+			);
+		}
+
+		// Act.
+		$response = $this->push_order_create( $envelope );
+
+		// Assert.
+		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( (int) $response->get_data()['document']['id'] );
+		$fees  = array_values( $order->get_items( 'fee' ) );
+		$this->assertSame( array( 'Bag', 'Rounding' ), array_map( static fn( $fee ) => $fee->get_name(), $fees ) );
+		$this->assertSame( '-0.12', wc_format_decimal( $fees[1]->get_total(), 2 ) );
+		$this->assertSame( 'none', $fees[1]->get_tax_status() );
+		$this->assertSame( '0.00', wc_format_decimal( $fees[1]->get_total_tax(), 2 ) );
+		$this->assertSame( array(), array_filter( $fees[1]->get_taxes()['total'] ?? array() ) );
+		$this->assertSame( '12.00', wc_format_decimal( $order->get_total(), 2 ) );
+		// The -0.02 rounding test's order also has 2.02 tax: product 10.00 at 20% = 2.00, Bag 0.10 at 20% = 0.02, Rounding untaxed.
+		$this->assertSame( '2.02', wc_format_decimal( $order->get_total_tax(), 2 ) );
+		$this->assertTrue( $order->is_paid() );
+	}
+
 	public function test_v5_fee_golden_pair_replay_returns_same_order_without_duplicates(): void {
 		// Arrange.
 		$envelope = $this->fee_golden_envelope();

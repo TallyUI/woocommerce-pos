@@ -35,7 +35,8 @@ The tests that pin it are `tests/includes/Sync/Test_Rest_Dispatch_Tally_Order_Cr
    - The route (`API/V2/Tally_Payment_Methods_Controller`, added to the v2 service map from `Sync/Api.php`) answers `{ schema: 1, contract: '1.3', methods }`. It sends one row per gateway the POS payment gateway settings list, with only the keys `wooPaymentMethods` in `@tallyui/connector-woocommerce` reads. Each value is what upstream's `Payments/Contract/Descriptor_Builder` gives for that gateway. Without this route the connector falls back to its own defaults, which never round.
    - The cash rounding increment is a `rounding_increment` select on the POS Cash gateway's WooCommerce settings form (`Gateways/Cash`, stored in `woocommerce_pos_cash_settings`). Its choices are `Cash::ROUNDING_INCREMENTS`, copied from upstream's `Payment_Gateways_Section`. The default is no rounding. A value off the list stores as no rounding and is served as `defaults.rounding: null`; only `pos_cash` ever rounds.
    - It is not an upstream merge: `tally` is far behind upstream, and that merge changes `vendor_prefixed`, `assets`, `packages` and `composer.json`, which the dev store overlay refuses. The setting lives on the gateway because the POS settings app is built JS in `packages/`.
-   - The tests are `tests/includes/API/Test_Tally_Payment_Methods.php` and the cash rounding fee test in `Test_Rest_Dispatch_Tally_Order_Create_V5.php`.
+   - The tests are `tests/includes/API/Test_Tally_Payment_Methods.php` and the two cash rounding fee tests in `Test_Rest_Dispatch_Tally_Order_Create_V5.php`.
+   - The cash Rounding fee relies on `Orders::fee_after_calculate_taxes` to keep a negative `tax_status: none` fee untaxed on a POS order; WooCommerce alone apportions line tax onto it. Any upstream merge that replaces or narrows this STOPGAP must preserve that behaviour, which the two cash rounding tests in `Test_Rest_Dispatch_Tally_Order_Create_V5` verify.
 
 ## Syncing with upstream
 
